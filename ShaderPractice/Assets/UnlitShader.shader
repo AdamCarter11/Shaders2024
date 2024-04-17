@@ -14,11 +14,33 @@ Shader "Unlit/UnlitShader"
         SubShader
     {
         // more render pipeline related
-        Tags { "RenderType" = "Opaque" }
-        LOD 100 // basically never used
+        // subshader tags
+        Tags { 
+                "RenderType" = "Transparent" // set this to "Opaque" if we don't want it transparent, or "Transparent" if we do want it transparent. Used for post processing
+                "Queue" = "Transparent" // don't need this if opaque but this is needed if transparent so that it doesn't always show up behind everything else. This changes render order
+    
+            } 
+        LOD 100 // basically never used but controls height level?
 
         Pass // graphics related stuff for this specic pass
         {
+            // pass tags
+
+            // Blending modes (defined before CGPROGRAM
+            // adding this here applies the blend to this whole shader
+            // blendings formula looks like this: (src * A +/- dst * B) src = source, dst = destination, A/B +/- are values we can change
+            // so an additive blend would use (src * 1 + dst * 1)
+            // Multiply blend: (src * dst + dst * 0), so A is holding dst, to simplify: src * dst
+            // when using transparent objects, we have to make it not write to the depth buffer so we can actually see behind it
+            // depth buffer is basically a way to not render objects that are behind other objects
+
+            //Cull Back // default value, it will cull the backside of the object, fine for opaque objects
+            //Cull Front // Culls the front of the object
+            Cull Off  // turns culling off, good for transparent objs
+            ZWrite off // makes it NOT write to the depth buffer, ie, it's see through, but makes it always look like it's behind everything else
+            Blend One One // additive blend
+            //Blend DstColor Zero // multiply blend
+            
             // anything inside CGPROGRAM to ENDCG is part of the shader code
             CGPROGRAM
             #pragma vertex vert // tells compiler what function is the vertex shader
@@ -28,6 +50,9 @@ Shader "Unlit/UnlitShader"
             //#pragma multi_compile_fog // I'm ignoring fog in this file
 
             #include "UnityCG.cginc"
+            
+            // preprocessor define
+            #define TAU 6.28318530718 // this basically just means wherever we see TAU, replace it with the number
 
             float _Value; // created on line 6, value is gotten from inspector
             float4 _ColorA, _ColorB; // created inside properties, this allows us to access it in Pass
@@ -40,8 +65,8 @@ Shader "Unlit/UnlitShader"
                 // float3 is the direction (vector3), but a float4 has direction + sign information (whether it's mirrored)
                 float4 vertex : POSITION; // vertex position. We are passing data from POSITION (compiler specific) into variable named vertex
                 float3 normals : NORMAL;
-                //float4 tangent : TANGENT;
-                //float4 color : COLOR;
+                //float4 tangent : TANGENT; // tangent direction (xyz) tangent sign (w) 
+                //float4 color : COLOR; // vertex colors
                 float2 uv0 : TEXCOORD0;  // UV cordinates. same as vertex but this can be duplicated for 0,1,2,etc. Often UV data is just data
             };
 
@@ -57,7 +82,7 @@ Shader "Unlit/UnlitShader"
             //sampler2D _MainTex;
             //float4 _MainTex_ST;
 
-            // usually you have more frags (pixels) than you do vertices, so you want to try and do as much as you can in the vert rather than the frag for optimization
+            // usually you have more frags (pixels) than you do vertices, so you want to try and do as much as you can in the vertex shader rather than the frag shader for optimization
             v2f vert (MeshData v) // meshData is normally named appData
             {
                 v2f o;
@@ -104,13 +129,25 @@ Shader "Unlit/UnlitShader"
                 //return float4(i.uv, 0, 1);
 
                 // shaders don't clamp lerp values between 0 to 1, so we have to do that otherwise we get other colors
-                float t = saturate(InverseLerp(_ColorStart, _ColorEnd, i.uv.x)); // saturate is basically clamping, if less than 0 set to 0, if more than 1, set to 1
+                //float t = saturate(InverseLerp(_ColorStart, _ColorEnd, i.uv.x)); // saturate is basically clamping, if less than 0 set to 0, if more than 1, set to 1
                 // frac = someVal - floor(someVal) (can be used to check if things need clamping)
-                t = frac(t);
-                float4 outputColor = lerp(_ColorA, _ColorB, t);
-                return outputColor;
+                //t = frac(t);
+                //float4 outputColor = lerp(_ColorA, _ColorB, t);
+                //return outputColor;
+
+                // Unity has a built in time var called _Time.xyzw (xyzw are different scales of time, y is seconds)
+                //_Time.y
+
+                float xOffset = cos(i.uv.x * TAU * 8) * .01; // this makes the lines wavy vertically
+                // by adding time to the offset, we are moving the lines based on time, creating a spinning effect
+                float t = cos((i.uv.y + xOffset - _Time.y * .1f) * TAU * 5) * .5 + .5; // this creates lines from -1 to 1 repeating (5, .5, .5 are just offseting values)
+                // we can then make this have a fade out effect
+                t *= 1 - i.uv.y;
+                return t;
             }
             ENDCG
         }
     }
 }
+
+
