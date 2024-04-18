@@ -38,6 +38,9 @@ Shader "Unlit/UnlitShader"
             //Cull Front // Culls the front of the object
             Cull Off  // turns culling off, good for transparent objs
             ZWrite off // makes it NOT write to the depth buffer, ie, it's see through, but makes it always look like it's behind everything else
+            //ZTest LEqual // default value, if depth of this obj is <= the depth already written into the depth buffer, show it, otherwise, don't, ie, if obj is in other obj, don't show
+            //ZTest Always // means obj is always showing, even if inside or behind other objs
+            //ZTest GEqual // only draw if behind something
             Blend One One // additive blend
             //Blend DstColor Zero // multiply blend
             
@@ -143,7 +146,10 @@ Shader "Unlit/UnlitShader"
                 float t = cos((i.uv.y + xOffset - _Time.y * .1f) * TAU * 5) * .5 + .5; // this creates lines from -1 to 1 repeating (5, .5, .5 are just offseting values)
                 // we can then make this have a fade out effect
                 t *= 1 - i.uv.y;
-                return t;
+                float topBottomRemover = (abs(i.normal.y) < .999); // basically remove all the flat faces facing up/down
+                float waves = t * topBottomRemover;
+                float4 gradient = lerp(_ColorA, _ColorB, i.uv.y);
+                return waves * gradient;
             }
             ENDCG
         }
